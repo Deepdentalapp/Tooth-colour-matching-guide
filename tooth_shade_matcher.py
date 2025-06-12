@@ -1,16 +1,15 @@
-# app.py
-
 import streamlit as st
 import numpy as np
 from PIL import Image
 import cv2
+from streamlit_drawable_canvas import st_canvas
 
-st.set_page_config(page_title="AffoDent Tooth Shade Matcher (Lab Based)", layout="centered")
+st.set_page_config(page_title="AffoDent Tooth Shade Matcher", layout="centered")
 
 st.title("🦷 AffoDent Tooth Shade Matcher")
-st.markdown("Upload a close-up photo of the tooth and select a point to match the closest shade using Lab color space.")
+st.markdown("Upload a clear tooth photo, then **tap or click** on the tooth to match the closest Vita Classical shade using **Lab color analysis**.")
 
-# Vita Classical shades with RGB references
+# Vita shade guide with reference RGB values
 shade_guide_rgb = {
     "A1": (255, 240, 220),
     "A2": (240, 224, 200),
@@ -25,42 +24,56 @@ shade_guide_rgb = {
 
 # Convert RGB to Lab using OpenCV
 def rgb_to_lab(rgb):
-    pixel = np.uint8([[list(rgb)]])
-    lab = cv2.cvtColor(pixel, cv2.COLOR_RGB2LAB)
+    rgb_array = np.uint8([[list(rgb)]])
+    lab = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2LAB)
     return lab[0][0]
 
-# Get closest shade in Lab space
+# Find closest shade in Lab color space
 def get_closest_shade_lab(input_rgb):
     input_lab = rgb_to_lab(input_rgb)
-    min_dist = float('inf')
-    closest_shade = None
-    for name, ref_rgb in shade_guide_rgb.items():
+    closest = None
+    min_dist = float("inf")
+    for shade, ref_rgb in shade_guide_rgb.items():
         ref_lab = rgb_to_lab(ref_rgb)
         dist = np.linalg.norm(input_lab - ref_lab)
         if dist < min_dist:
             min_dist = dist
-            closest_shade = name
-    return closest_shade
+            closest = shade
+    return closest
 
-# Upload image
-uploaded_image = st.file_uploader("Upload a tooth image (JPG/PNG)", type=["jpg", "jpeg", "png"])
+# File uploader
+uploaded_image = st.file_uploader("Upload a tooth image", type=["jpg", "jpeg", "png"])
 
 if uploaded_image:
     image = Image.open(uploaded_image).convert("RGB")
     img_array = np.array(image)
-    st.image(image, caption="Uploaded Tooth Image", use_column_width=True)
 
-    st.markdown("### Select pixel coordinates (approximate for now)")
-    x = st.slider("X position", 0, img_array.shape[1] - 1, img_array.shape[1] // 2)
-    y = st.slider("Y position", 0, img_array.shape[0] - 1, img_array.shape[0] // 2)
+    st.markdown("### 👆 Click on the image to pick the tooth color")
 
-    selected_rgb = tuple(int(v) for v in img_array[y, x])
-    st.markdown(f"**Selected RGB color:** {selected_rgb}")
-    st.color_picker("Preview", value="#%02x%02x%02x" % selected_rgb, label_visibility="collapsed")
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 255, 255, 0)",  # Transparent fill
+        stroke_width=1,
+        background_image=image,
+        update_streamlit=True,
+        height=image.height,
+        width=image.width,
+        drawing_mode="point",
+        point_display_radius=5,
+        key="canvas",
+    )
 
-    match = get_closest_shade_lab(selected_rgb)
-    st.success(f"✅ Closest Vita Classical Match: **{match}** (Reference RGB: {shade_guide_rgb[match]})")
+    if canvas_result.json_data and canvas_result.json_data["objects"]:
+        point = canvas_result.json_data["objects"][-1]
+        x = int(point["left"])
+        y = int(point["top"])
 
-    # Optional manual override
-    manual = st.selectbox("Or manually select shade", list(shade_guide_rgb.keys()))
-    st.info(f"Manually selected: {manual}")
+        if 0 <= x < img_array.shape[1] and 0 <= y < img_array.shape[0]:
+            selected_rgb = tuple(int(c) for c in img_array[y, x])
+            st.markdown(f"**Selected Pixel RGB:** {selected_rgb}")
+            st.color_picker("Color Preview", value="#%02x%02x%02x" % selected_rgb, label_visibility="collapsed")
+
+            matched_shade = get_closest_shade_lab(selected_rgb)
+            st.success(f"✅ Closest Vita Classical Match: **{matched_shade}**")
+            st.markdown(f"Reference RGB: `{shade_guide_rgb[matched_shade]}`")
+    else:
+        st.info("Click on the tooth area to pick a color.")
