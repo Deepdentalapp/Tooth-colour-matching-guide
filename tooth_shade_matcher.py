@@ -53,7 +53,7 @@ if uploaded_image:
     canvas_result = st_canvas(
         fill_color="rgba(255, 255, 255, 0)",  # Transparent fill
         stroke_width=1,
-        background_image=image,
+        background_image=image.convert("RGBA"),  # ✅ Proper format for canvas
         update_streamlit=True,
         height=image.height,
         width=image.width,
