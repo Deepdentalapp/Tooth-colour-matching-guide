@@ -1,15 +1,17 @@
+# app.py
+
 import streamlit as st
 import numpy as np
 from PIL import Image
 import cv2
 
-st.set_page_config(page_title="AffoDent Tooth Shade Matcher", layout="centered")
+st.set_page_config(page_title="AffoDent Tooth Shade Matcher (Lab Based)", layout="centered")
 
 st.title("🦷 AffoDent Tooth Shade Matcher")
-st.markdown("Upload a close-up photo of the patient's tooth and click to match with a dental shade.")
+st.markdown("Upload a close-up photo of the tooth and select a point to match the closest shade using Lab color space.")
 
-# Define shade guide (Vita Classical) with approximate RGB
-shade_guide = {
+# Vita Classical shades with RGB references
+shade_guide_rgb = {
     "A1": (255, 240, 220),
     "A2": (240, 224, 200),
     "A3": (225, 205, 185),
@@ -21,40 +23,44 @@ shade_guide = {
     "D2": (200, 180, 160)
 }
 
-# Function to find closest shade
-def get_closest_shade(input_rgb):
+# Convert RGB to Lab using OpenCV
+def rgb_to_lab(rgb):
+    pixel = np.uint8([[list(rgb)]])
+    lab = cv2.cvtColor(pixel, cv2.COLOR_RGB2LAB)
+    return lab[0][0]
+
+# Get closest shade in Lab space
+def get_closest_shade_lab(input_rgb):
+    input_lab = rgb_to_lab(input_rgb)
     min_dist = float('inf')
-    closest = None
-    for name, rgb in shade_guide.items():
-        dist = np.linalg.norm(np.array(input_rgb) - np.array(rgb))
+    closest_shade = None
+    for name, ref_rgb in shade_guide_rgb.items():
+        ref_lab = rgb_to_lab(ref_rgb)
+        dist = np.linalg.norm(input_lab - ref_lab)
         if dist < min_dist:
             min_dist = dist
-            closest = name
-    return closest
+            closest_shade = name
+    return closest_shade
 
 # Upload image
 uploaded_image = st.file_uploader("Upload a tooth image (JPG/PNG)", type=["jpg", "jpeg", "png"])
+
 if uploaded_image:
     image = Image.open(uploaded_image).convert("RGB")
     img_array = np.array(image)
     st.image(image, caption="Uploaded Tooth Image", use_column_width=True)
 
-    st.markdown("### Click to select a point on the image")
-    st.markdown("*(Note: In this demo, click functionality is simulated)*")
+    st.markdown("### Select pixel coordinates (approximate for now)")
+    x = st.slider("X position", 0, img_array.shape[1] - 1, img_array.shape[1] // 2)
+    y = st.slider("Y position", 0, img_array.shape[0] - 1, img_array.shape[0] // 2)
 
-    x = st.slider("Select X pixel", 0, img_array.shape[1]-1, img_array.shape[1]//2)
-    y = st.slider("Select Y pixel", 0, img_array.shape[0]-1, img_array.shape[0]//2)
-
-    selected_color = img_array[y, x]
-    selected_rgb = tuple(int(v) for v in selected_color)
-
-    st.markdown(f"**Selected Pixel Color:** RGB{selected_rgb}")
+    selected_rgb = tuple(int(v) for v in img_array[y, x])
+    st.markdown(f"**Selected RGB color:** {selected_rgb}")
     st.color_picker("Preview", value="#%02x%02x%02x" % selected_rgb, label_visibility="collapsed")
 
-    # Find closest shade
-    match = get_closest_shade(selected_rgb)
-    st.success(f"✅ Closest Match: **{match}** (RGB {shade_guide[match]})")
+    match = get_closest_shade_lab(selected_rgb)
+    st.success(f"✅ Closest Vita Classical Match: **{match}** (Reference RGB: {shade_guide_rgb[match]})")
 
     # Optional manual override
-    manual = st.selectbox("Or manually select shade", list(shade_guide.keys()))
+    manual = st.selectbox("Or manually select shade", list(shade_guide_rgb.keys()))
     st.info(f"Manually selected: {manual}")
