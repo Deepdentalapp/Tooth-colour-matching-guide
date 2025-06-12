@@ -4,12 +4,12 @@ from PIL import Image
 import cv2
 from streamlit_drawable_canvas import st_canvas
 
-# Page config
-st.set_page_config(page_title="AffoDent Tooth Shade Matcher", layout="centered")
+# Page setup
+st.set_page_config(page_title="Tooth Shade Matcher - AffoDent", layout="centered")
 st.title("🦷 AffoDent Tooth Shade Matcher")
-st.markdown("Upload a clear photo of the tooth and **click on the tooth** to match the closest Vita shade using Lab color analysis.")
+st.markdown("Upload a clear photo of the patient's tooth and **tap on the tooth** to find the closest matching shade from the Vita Classical shade guide.")
 
-# Vita Classic reference RGB shades
+# Shade reference (Vita Classical)
 shade_guide_rgb = {
     "A1": (255, 240, 220),
     "A2": (240, 224, 200),
@@ -24,11 +24,11 @@ shade_guide_rgb = {
 
 # Convert RGB to Lab
 def rgb_to_lab(rgb):
-    rgb_array = np.uint8([[list(rgb)]])
-    lab = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2LAB)
+    rgb_arr = np.uint8([[list(rgb)]])
+    lab = cv2.cvtColor(rgb_arr, cv2.COLOR_RGB2LAB)
     return lab[0][0]
 
-# Find closest shade based on Lab distance
+# Find closest shade in Lab space
 def get_closest_shade_lab(input_rgb):
     input_lab = rgb_to_lab(input_rgb)
     closest = None
@@ -42,44 +42,42 @@ def get_closest_shade_lab(input_rgb):
     return closest
 
 # Upload image
-uploaded_image = st.file_uploader("Upload a tooth image", type=["jpg", "jpeg", "png"])
+uploaded_image = st.file_uploader("📤 Upload tooth image", type=["jpg", "jpeg", "png"])
 
 if uploaded_image:
     image = Image.open(uploaded_image).convert("RGB")
     img_array = np.array(image)
 
-    st.markdown("### 👆 Tap or click on the image to pick tooth color")
+    st.markdown("### ✏️ Click on the tooth to detect its color")
 
-    # Prepare RGBA canvas image
-    rgba_img = image.convert("RGBA")
-    bg_image_array = np.array(rgba_img)
+    # Convert to RGBA for canvas
+    rgba_image = image.convert("RGBA")
+    canvas_bg = np.array(rgba_image)
 
-    # Show canvas
     canvas_result = st_canvas(
-        fill_color="rgba(255, 255, 255, 0)",  # Transparent fill
+        fill_color="rgba(255, 255, 255, 0)",
         stroke_width=1,
-        background_image=bg_image_array,
+        background_image=canvas_bg,
         update_streamlit=True,
-        height=rgba_img.height,
-        width=rgba_img.width,
+        height=rgba_image.height,
+        width=rgba_image.width,
         drawing_mode="point",
         point_display_radius=5,
         key="canvas",
     )
 
-    # Process click
     if canvas_result.json_data and canvas_result.json_data["objects"]:
-        point = canvas_result.json_data["objects"][-1]
-        x = int(point["left"])
-        y = int(point["top"])
+        last_point = canvas_result.json_data["objects"][-1]
+        x = int(last_point["left"])
+        y = int(last_point["top"])
 
         if 0 <= x < img_array.shape[1] and 0 <= y < img_array.shape[0]:
             selected_rgb = tuple(int(c) for c in img_array[y, x])
-            st.markdown(f"**Selected Pixel RGB:** {selected_rgb}")
+            st.markdown(f"🎯 **Selected RGB:** {selected_rgb}")
             st.color_picker("Color Preview", value="#%02x%02x%02x" % selected_rgb, label_visibility="collapsed")
 
-            matched_shade = get_closest_shade_lab(selected_rgb)
-            st.success(f"✅ Closest Vita Classical Match: **{matched_shade}**")
-            st.markdown(f"Reference RGB: `{shade_guide_rgb[matched_shade]}`")
+            match = get_closest_shade_lab(selected_rgb)
+            st.success(f"🟢 Closest Match: **{match}**")
+            st.markdown(f"Reference RGB: `{shade_guide_rgb[match]}`")
     else:
-        st.info("Click on the tooth in the image to select a color.")
+        st.info("Click anywhere on the image to sample the tooth color.")
